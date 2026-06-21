@@ -43,6 +43,38 @@ export const getAdminDashboard = async (req, res) => {
   }
 };
 
+// Get All Complaints
+export const getAllComplaints = async (req, res) => {
+  try {
+    const [complaints] = await db.execute(`
+      SELECT
+        c.id,
+        s.name AS student_name,
+        c.title,
+        c.category,
+        c.priority,
+        c.status,
+        c.created_at
+      FROM complaints c
+      JOIN students s
+      ON c.student_id = s.id
+      ORDER BY c.created_at DESC
+    `);
+
+    res.status(200).json({
+      success: true,
+      complaints,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // Complaints By Category
 export const complaintsByCategory = async (req, res) => {
   try {
@@ -106,6 +138,70 @@ export const highPriorityComplaints = async (req, res) => {
     res.status(200).json({
       success: true,
       complaints,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+  
+};
+export const updateComplaintStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    await db.execute(
+      `UPDATE complaints
+       SET status = ?
+       WHERE id = ?`,
+      [status, id]
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Status Updated Successfully",
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+export const getComplaintById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [complaints] = await db.execute(
+      `
+      SELECT
+        c.*,
+        s.name AS student_name,
+        s.email
+      FROM complaints c
+      JOIN students s
+      ON c.student_id = s.id
+      WHERE c.id = ?
+      `,
+      [id]
+    );
+
+    if (complaints.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      complaint: complaints[0],
     });
   } catch (error) {
     console.error(error);
