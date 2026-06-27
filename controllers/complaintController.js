@@ -191,27 +191,58 @@ export const getStudentDashboard = async (req, res) => {
 export const addRating = async (req, res) => {
   try {
     const { id } = req.params;
-    const { rating } = req.body;
+    const { rating, feedback } = req.body;
 
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({
-        success: false,
-        message: "Rating must be between 1 and 5",
-      });
+    let sentiment = "Neutral";
+
+    // Rating Based Analysis
+    if (rating >= 4) {
+      sentiment = "Positive";
+    } else if (rating <= 2) {
+      sentiment = "Negative";
+    } else {
+      sentiment = "Neutral";
+    }
+
+    // Feedback Based Analysis
+    const text = feedback?.toLowerCase() || "";
+
+    if (
+      text.includes("not resolved") ||
+      text.includes("bad") ||
+      text.includes("poor") ||
+      text.includes("worst") ||
+      text.includes("issue still")
+    ) {
+      sentiment = "Negative";
+    }
+
+    if (
+      text.includes("excellent") ||
+      text.includes("great") ||
+      text.includes("thank you") ||
+      text.includes("happy") ||
+      text.includes("solved")
+    ) {
+      sentiment = "Positive";
     }
 
     await db.execute(
-      `UPDATE complaints
-       SET rating = ?
-       WHERE id = ?`,
-      [rating, id]
+      `
+      UPDATE complaints
+      SET rating = ?,
+          feedback = ?,
+          sentiment = ?
+      WHERE id = ?
+      `,
+      [rating, feedback, sentiment, id]
     );
 
     res.status(200).json({
       success: true,
-      message: "Rating Submitted Successfully",
-      rating,
+      message: "Feedback Submitted Successfully",
     });
+
   } catch (error) {
     console.error(error);
 

@@ -1,6 +1,7 @@
 import express from "express";
 
 import {
+  loginAdmin,
   getAdminDashboard,
   getAllComplaints,
   getComplaintById,
@@ -8,9 +9,10 @@ import {
   complaintsByStatus,
   highPriorityComplaints,
   updateComplaintStatus,
+  assignComplaint,
 } from "../controllers/adminController.js";
 const router = express.Router();
-
+router.post("/login", loginAdmin);
 // Dashboard Statistics
 router.get("/dashboard", getAdminDashboard);
 
@@ -32,6 +34,7 @@ router.get(
 );
 
 
+
 // High Priority Complaints
 router.get(
   "/high-priority",
@@ -40,6 +43,10 @@ router.get(
 router.put(
   "/complaints/:id/status",
   updateComplaintStatus
+);
+router.put(
+  "/complaints/:id/assign",
+  assignComplaint
 );
 router.get(
   "/complaints/:id",

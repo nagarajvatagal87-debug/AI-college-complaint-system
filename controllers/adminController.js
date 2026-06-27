@@ -1,5 +1,7 @@
 import { db } from "../config/db.js";
-
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { sendEmail } from "../services/emailService.js";
 // Dashboard Statistics
 export const getAdminDashboard = async (req, res) => {
   try {
@@ -48,13 +50,14 @@ export const getAllComplaints = async (req, res) => {
   try {
     const [complaints] = await db.execute(`
       SELECT
-        c.id,
-        s.name AS student_name,
-        c.title,
-        c.category,
-        c.priority,
-        c.status,
-        c.created_at
+    c.id,
+    s.name AS student_name,
+    c.title,
+    c.category,
+    c.priority,
+    c.status,
+    c.assigned_to,
+    c.created_at
       FROM complaints c
       JOIN students s
       ON c.student_id = s.id
@@ -160,13 +163,45 @@ export const updateComplaintStatus = async (req, res) => {
        WHERE id = ?`,
       [status, id]
     );
+    
+
+    const [complaint] = await db.execute(
+      `
+      SELECT
+        c.title,
+        s.name,
+        s.email
+      FROM complaints c
+      JOIN students s
+      ON c.student_id = s.id
+      WHERE c.id = ?
+      `,
+      [id]
+    );
+    
+
+    if (complaint.length > 0) {
+      await sendEmail(
+        complaint[0].email,
+        "Complaint Status Updated",
+        `Hello ${complaint[0].name},
+
+Your complaint status has been updated.
+
+Complaint Title: ${complaint[0].title}
+Current Status: ${status}
+
+Thank you,
+CampusVoice Team`
+      );
+    }
 
     res.status(200).json({
       success: true,
       message: "Status Updated Successfully",
     });
   } catch (error) {
-    console.error(error);
+    console.error("STATUS UPDATE ERROR:", error);
 
     res.status(500).json({
       success: false,
@@ -181,13 +216,28 @@ export const getComplaintById = async (req, res) => {
     const [complaints] = await db.execute(
       `
       SELECT
-        c.*,
-        s.name AS student_name,
-        s.email
-      FROM complaints c
-      JOIN students s
-      ON c.student_id = s.id
-      WHERE c.id = ?
+c.*,
+
+s.name AS student_name,
+s.email,
+
+st.email AS staff_email,
+st.name AS staff_name,
+
+a.username AS admin_name
+
+FROM complaints c
+
+JOIN students s
+ON c.student_id=s.id
+
+LEFT JOIN staff st
+ON c.assigned_to=st.name
+
+LEFT JOIN admin a
+ON a.id=1
+
+WHERE c.id=?
       `,
       [id]
     );
@@ -203,6 +253,104 @@ export const getComplaintById = async (req, res) => {
       success: true,
       complaint: complaints[0],
     });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+// Admin Login
+export const loginAdmin = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    const [admin] = await db.execute(
+      "SELECT * FROM admin WHERE username = ?",
+      [username]
+    );
+
+    if (admin.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(
+      password,
+      admin[0].password
+    );
+
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid Password",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: admin[0].id,
+        role: "admin",
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      }
+    );
+
+    res.status(200).json({
+      success: true,
+      token,
+      admin: {
+        id: admin[0].id,
+        username: admin[0].username,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+export const assignComplaint = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assigned_to } = req.body;
+
+    await db.execute(
+      `
+      UPDATE complaints
+SET assigned_to=?,
+assigned_at=NOW()
+WHERE id=?
+      `,
+      [assigned_to, id]
+    );
+
+    await db.execute(
+  `
+  INSERT INTO notifications
+  (staff_name, message)
+  VALUES (?, ?)
+  `,
+  [
+    assigned_to,
+    `Complaint #${id} assigned to you at ${new Date().toLocaleTimeString()}`
+  ]
+);
+
+    res.status(200).json({
+      success: true,
+      message: "Complaint Assigned Successfully",
+    });
+
   } catch (error) {
     console.error(error);
 
